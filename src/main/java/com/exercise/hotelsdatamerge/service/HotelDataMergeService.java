@@ -37,13 +37,13 @@ public class HotelDataMergeService {
     @Autowired
     private MergedHotelReducer mergedHotelReducer;
 
-    public Flux<Hotel> firstHotelDataSource () {
+    private Flux<Hotel> firstHotelDataSource () {
         return webClientFactory.getWebClientFor(HotelSource.FIRST).get().retrieve().bodyToFlux(FirstDataSourceHotelDto.class).map(firstDataSourceHotelDtoToStatisticConverter);
     }
-    public Flux<Hotel> secondHotelDataSource () {
+    private Flux<Hotel> secondHotelDataSource () {
         return webClientFactory.getWebClientFor(HotelSource.SECOND).get().retrieve().bodyToFlux(SecondDataSourceHotelDto.class).map(secondDataSourceHotelDtoToStatisticConverter);
     }
-    public Flux<Hotel> thirdHotelDataSource () {
+    private Flux<Hotel> thirdHotelDataSource () {
         return webClientFactory.getWebClientFor(HotelSource.THIRD).get().retrieve().bodyToFlux(ThirdDataSourceHotelDto.class).map(thirdDataSourceHotelDtoToStatisticConverter);
     }
 
