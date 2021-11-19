@@ -54,11 +54,7 @@ public class HotelDataMergeService {
      * @return
      */
     public Flux<Hotel> getHotels(Set<Integer> destinationIds, String hotelId) {
-        Flux<Hotel> firstHotelSourceFlux =  firstHotelDataSource();
-        Flux<Hotel> secondHotelSourceFlux =  secondHotelDataSource();
-        Flux<Hotel> thirdHotelSourceFlux =  thirdHotelDataSource();
-
-        return Flux.merge(firstHotelSourceFlux, secondHotelSourceFlux, thirdHotelSourceFlux)
+        return Flux.merge(firstHotelDataSource(), secondHotelDataSource(), thirdHotelDataSource())
                 .filter(destinationIdFilter(destinationIds))
                 .filter(hotelIdFilter(hotelId))
                 .publishOn(Schedulers.boundedElastic())
