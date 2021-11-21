@@ -2,71 +2,43 @@ package com.exercise.hotelsdatamerge.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import lombok.Data;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
-public interface Hotel {
-    void setId(String id);
+@Data
+public class Hotel {
+    private String id;
+    private Integer destinationId;
+    private Double lat;
+    private Double lng;
+    private String address;
+    private String city;
+    private String country;
+    private String description;
+    private String name;
+    private Map<String, Set<String>> amenities = new HashMap<>();
+    private Map<String, Set<Image>> images = new HashMap<>();
+    private Set<String> bookingConditions = new HashSet<>();
 
-    String getId();
 
-    Integer getDestiationId();
+    @JsonProperty
+    public Location getLocation() {
+        return new Location(getLat() != null ? getLat() : -1, getLng() != null ? getLng() : -1, getAddress(), getCity(), getCountry());
+    }
 
-    void setDestiationId(Integer destiationId);
+    @JsonSetter
+    public void setLocation(Location location) {
+        if (location == null) {
+            return;
+        }
+        setLat(location.getLat());
+        setLng(location.getLng());
+        setAddress(location.getAddress());
+        setCity(location.getCity());
+        setCountry(location.getCountry());
+    }
 
-    void setLat(Double id);
-
-    @JsonIgnore
-    Double getLat();
-
-    void setLng(Double id);
-
-    @JsonIgnore
-    Double getLng();
-
-    void setAdress(String address);
-
-    @JsonIgnore
-    String getAddress();
-
-    void setCity(String city);
-
-    @JsonIgnore
-    String getCity();
-
-    void setCountry(String country);
-
-    @JsonIgnore
-    String getCountry();
-
-    Location getLocation();
-
-    void setDescription(String description);
-
-    String getDescription();
-
-    void setAmenities(Amenity amenities);
-
-    @JsonIgnore
-    List<Amenity> getAmenities();
-
-    @JsonProperty("amenities")
-    Map<String, List<String>> getAmenitiesAsMap();
-
-    void setImages(Image image);
-
-    @JsonIgnore
-    List<Image> getImages();
-
-    @JsonProperty("images")
-    Map<String, List<Image>> getImagesAsMap();
-
-    void setBookingConditions(List<String> bookingConditions);
-
-    List<String> getBookingConditions();
-
-    String getName();
-
-    void setName(String name);
 }

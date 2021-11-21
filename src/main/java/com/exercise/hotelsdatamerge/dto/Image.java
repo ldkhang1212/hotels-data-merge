@@ -6,13 +6,14 @@ import com.fasterxml.jackson.annotation.JsonSetter;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Comparator;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Image {
-    @JsonIgnore
-    private String category;
+public class Image implements Comparable<Image> {
     private String link;
     private String description;
 
@@ -27,4 +28,8 @@ public class Image {
     }
 
 
+    @Override
+    public int compareTo(Image o) {
+        return StringUtils.compare(this.getDescription(), o.getDescription());
+    }
 }

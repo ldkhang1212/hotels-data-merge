@@ -2,29 +2,34 @@ package com.exercise.hotelsdatamerge.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.sun.source.tree.Tree;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
+import lombok.Value;
+import org.apache.commons.lang3.tuple.Pair;
+import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @AllArgsConstructor
 @NoArgsConstructor
-public class MostFrequentValueMergedHotel implements Hotel {
-    private Map<String, Integer> idSStats = new HashMap<>();
-    private Map<Integer, Integer> destinationIdStats= new HashMap<>();
-    private Map<String, Integer> nameStats= new HashMap<>();
+public class MostFrequentValueMergedHotel extends Hotel {
+    private Map<String, Integer> idSStats = new TreeMap<>();
+    private Map<Integer, Integer> destinationIdStats= new TreeMap<>();
+    private Map<String, Integer> nameStats= new TreeMap<>();
 
-    private Map<Double, Integer> latStats= new HashMap<>();
-    private Map<Double, Integer> lngStats= new HashMap<>();
-    private Map<String, Integer> addressStats= new HashMap<>();
-    private Map<String, Integer> cityStats= new HashMap<>();
-    private Map<String , Integer> countryStats= new HashMap<>();
+    private Map<Double, Integer> latStats= new TreeMap<>();
+    private Map<Double, Integer> lngStats= new TreeMap<>();
+    private Map<String, Integer> addressStats= new TreeMap<>();
+    private Map<String, Integer> cityStats= new TreeMap<>();
+    private Map<String , Integer> countryStats= new TreeMap<>();
 
-    private Map<String, Integer> descriptionStats= new HashMap<>();
-    private Map<String, Map<List<String>, Integer>> amenitiesStats= new HashMap<>();
-    private Map<String, Map<List<Image>, Integer>> imagesStats= new HashMap<>();
-    private Map<List<String> , Integer> bookingConditionStats= new HashMap<>();
+    private Map<String, Integer> descriptionStats= new TreeMap<>();
+
+    private Map<String, Set<String>> amenitiesStats =  new HashMap<>();
+    private Map<String, Set<Image>> imagesStats = new TreeMap<>();
+    private Set<String> bookingConditionStats= new TreeSet<>();
 
 
 
@@ -39,15 +44,14 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     @Override
-    public Integer getDestiationId() {
+    public Integer getDestinationId() {
         return (Integer) getObject(destinationIdStats);
     }
 
     @Override
-    public void setDestiationId(Integer destiationId) {
+    public void setDestinationId(Integer destiationId) {
         setObject(destinationIdStats, destiationId);
     }
-
 
     @Override
     public void setLat(Double id) {
@@ -72,7 +76,21 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     @Override
-    public void setAdress(String address) {
+    public void setAmenities(Map<String, Set<String>> inAmenities) {
+        if (!CollectionUtils.isEmpty(inAmenities)) {
+            inAmenities.entrySet().forEach(entry -> {
+                if (!amenitiesStats.containsKey(entry.getKey())) {
+                    amenitiesStats.put(entry.getKey(), new TreeSet<>(String.CASE_INSENSITIVE_ORDER));
+                }
+                amenitiesStats.get(entry.getKey()).addAll(entry.getValue());
+            });
+        }
+
+
+    }
+
+    @Override
+    public void setAddress(String address) {
         setObject(addressStats, address);
     }
 
@@ -88,6 +106,21 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     @Override
+    public void setImages(Map<String, Set<Image>> inImages) {
+        if (!CollectionUtils.isEmpty(inImages)) {
+            inImages.entrySet().forEach(entry -> {
+                String category = entry.getKey();
+                Set<Image> images = entry.getValue();
+                if (!imagesStats.containsKey(category)) {
+                    imagesStats.put(category, new TreeSet<>());
+                }
+                imagesStats.get(category).addAll(images);
+            });
+        }
+
+    }
+
+    @Override
     @JsonIgnore
     public String getCity() {
         return (String) getObject(cityStats);
@@ -97,6 +130,7 @@ public class MostFrequentValueMergedHotel implements Hotel {
     public void setCountry(String country) {
         setObject(countryStats, country);
     }
+
     @Override
     @JsonIgnore
     public String getCountry() {
@@ -104,8 +138,8 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     @Override
-    public Location getLocation() {
-        return new Location(getLat(), getLng(), getAddress(), getCity(), getCountry());
+    public void setLocation(Location location) {
+        super.setLocation(location);
     }
 
     @Override
@@ -119,63 +153,25 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     @Override
-    public void setAmenities(Amenity amenities) {
-        if (!amenitiesStats.containsKey(amenities.getCategory())) {
-            amenitiesStats.put(amenities.getCategory(), new HashMap<>());
+    public Map<String, Set<String>> getAmenities() {
+        return new HashMap<>(amenitiesStats);
+    }
+
+    @Override
+    public Map<String, Set<Image>> getImages() {
+        return new TreeMap<>(imagesStats);
+    }
+
+    @Override
+    public void setBookingConditions(Set<String> bookingConditions) {
+        if (!CollectionUtils.isEmpty(bookingConditions)) {
+            bookingConditionStats.addAll(bookingConditions);
         }
-        setObject(amenitiesStats.get(amenities.getCategory()), amenities.getValues());
-    }
-
-
-    @Override
-    @JsonIgnore
-    public List<Amenity> getAmenities() {
-        return amenitiesStats.entrySet().stream().map(entry -> {
-            Amenity amenities = new Amenity();
-            amenities.setCategory(entry.getKey());
-            amenities.setValues((List<String>) getObject(entry.getValue()));
-            return amenities;
-        }).collect(Collectors.toList());
     }
 
     @Override
-    @JsonProperty("amenities")
-    public Map<String, List<String>> getAmenitiesAsMap() {
-        return getAmenities().stream().collect(Collectors.toMap(Amenity::getCategory, Amenity::getValues));
-    }
-
-    @Override
-    public void setImages(Image image) {
-        if (!imagesStats.containsKey(image.getCategory())) {
-            imagesStats.put(image.getCategory(), new HashMap<>());
-        }
-        setObject(imagesStats.get(image.getCategory()), Collections.singletonList(image));
-    }
-
-
-    @Override
-    @JsonIgnore
-    public List<Image> getImages() {
-        return imagesStats.entrySet().stream().flatMap(entry -> {
-            List<Image> images = (List<Image>) getObject(entry.getValue());
-            return images.stream();
-        }).collect(Collectors.toList());
-    }
-
-    @Override
-    @JsonProperty("images")
-    public Map<String, List<Image>> getImagesAsMap() {
-        return getImages().stream().collect(Collectors.groupingBy(Image::getCategory));
-    }
-
-    @Override
-    public void setBookingConditions(List<String> bookingConditions) {
-        setObject(bookingConditionStats, bookingConditions);
-    }
-
-    @Override
-    public List<String> getBookingConditions() {
-        return (List<String>) getObject(bookingConditionStats);
+    public Set<String> getBookingConditions() {
+        return new TreeSet<>(bookingConditionStats);
     }
 
     @Override
@@ -198,6 +194,11 @@ public class MostFrequentValueMergedHotel implements Hotel {
     }
 
     private Object getObject(Map<? extends Object, Integer> stats) {
+
+        if (stats.isEmpty()) {
+            return null;
+        }
+
         Optional<? extends Map.Entry<?, Integer>> entryWithMaxOccurrence = stats.entrySet().stream().max((entry1, entry2) -> entry1.getValue() > entry2.getValue() ? 1 : -1);
         if (entryWithMaxOccurrence.isPresent()) {
             return entryWithMaxOccurrence.get().getKey();
