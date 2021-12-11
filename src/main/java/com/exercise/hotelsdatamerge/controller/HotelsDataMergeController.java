@@ -20,13 +20,13 @@ public class HotelsDataMergeController {
 
     /**
      * Get hotel list which is the result of merging 3 different sources.
-     * @param destinationIds destination id list
-     * @param hotelId hotel id
+     * @param destinationId destination id
+     * @param hotelIds hotel id list
      * @return
      */
     @GetMapping
-    private Flux<Hotel> getHotels(@RequestParam(value = "destinationId", required = false) Set<Integer> destinationIds,
-                                  @RequestParam(required = false) String hotelId) {
-        return hotelDataMergeService.getHotels(destinationIds, hotelId);
+    private Flux<Hotel> getHotels(@RequestParam(value = "destinationId", required = false) Integer destinationId,
+                                  @RequestParam(required = false, value = "hotelId") Set<String> hotelIds) {
+        return hotelDataMergeService.getHotels(destinationId, hotelIds);
     }
 }

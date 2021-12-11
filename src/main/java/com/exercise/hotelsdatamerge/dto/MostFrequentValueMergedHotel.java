@@ -6,11 +6,13 @@ import com.sun.source.tree.Tree;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 import lombok.Value;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @AllArgsConstructor
 @NoArgsConstructor
@@ -54,8 +56,8 @@ public class MostFrequentValueMergedHotel extends Hotel {
     }
 
     @Override
-    public void setLat(Double id) {
-        setObject(latStats, id);
+    public void setLat(Double lat) {
+        setDouble(latStats, lat);
     }
 
     @Override
@@ -65,8 +67,8 @@ public class MostFrequentValueMergedHotel extends Hotel {
     }
 
     @Override
-    public void setLng(Double id) {
-        setObject(lngStats, id);
+    public void setLng(Double lng) {
+        setDouble(lngStats, lng);
     }
 
     @Override
@@ -82,7 +84,11 @@ public class MostFrequentValueMergedHotel extends Hotel {
                 if (!amenitiesStats.containsKey(entry.getKey())) {
                     amenitiesStats.put(entry.getKey(), new TreeSet<>(String.CASE_INSENSITIVE_ORDER));
                 }
-                amenitiesStats.get(entry.getKey()).addAll(entry.getValue());
+                Set<String> uniformedValues = entry.getValue().stream().map(item -> item.trim())
+                        .map(s -> {
+                            return Stream.of(s.split("[\\s_]+|(?=\\p{Upper})")).map(StringUtils::capitalize).collect(Collectors.joining(" "));
+                        }).collect(Collectors.toSet());
+                amenitiesStats.get(entry.getKey()).addAll(uniformedValues);
             });
         }
 
@@ -183,6 +189,13 @@ public class MostFrequentValueMergedHotel extends Hotel {
     public void setName(String name) {
         setObject(nameStats, name);
     }
+
+    private void setDouble(Map<Double, Integer> stats, Double value) {
+        if (value != null && value.doubleValue() != 0) {
+            setObject(stats, value);
+        }
+    }
+
 
     private <T extends  Object> void setObject(Map<T, Integer> stats, T value) {
         if (value != null) {

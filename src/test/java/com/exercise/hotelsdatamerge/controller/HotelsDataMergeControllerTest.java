@@ -26,11 +26,16 @@ import org.mockserver.integration.ClientAndServer;
 import org.mockserver.matchers.Times;
 import org.mockserver.model.HttpRequest;
 import org.mockserver.model.HttpResponse;
+import org.mockserver.verify.VerificationTimes;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.web.client.response.MockRestResponseCreators;
 
 import java.util.*;
 import java.util.function.Consumer;
+
+import static org.mockserver.model.HttpError.error;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -40,82 +45,12 @@ import java.util.function.Consumer;
                 "spring.security.user.roles=ADMIN",
                 "hotelsources.first=localhost:1080/firstsource",
                 "hotelsources.second=localhost:1080/secondsource",
-                "hotelsources.third=localhost:1080/thirdsource"
+                "hotelsources.third=localhost:1080/thirdsource",
+                "cacheEnabled=false"
         })
-class HotelsDataMergeControllerTest {
-    private static final String FIRST_SOURCE_PATH = "/firstsource";
-    private static final String SECOND_SOURCE_PATH = "/secondsource";
-    private static final String THIRD_SOURCE_PATH = "/thirdsource";
-
-    @LocalServerPort
-    private Integer port;
-
-    private ObjectMapper objectMapper = new ObjectMapper();
-    private ClientAndServer mockServer;
-    private MockServerClient mockClient;
-    private Hotel[] actualHotelsResponse;
-    private Hotel currentHotel;
-    private String filter;
-    private int expectedHotelLength = 1;
-
-    private void mockHotelDataSource(String path, Object reponseBody) {
-        mockClient.when(
-                HttpRequest.request().withMethod("GET")
-                        .withPath(path)
-                ,
-                Times.unlimited()
-        ).respond(HttpResponse.response()
-                .withHeader("Content-Type", "application/json")
-                .withStatusCode(200).withBody(stringValueOrNullIfError(reponseBody))
-        );
-    }
-
-    private String stringValueOrNullIfError(Object reponseBody) {
-        try {
-            return objectMapper.writeValueAsString(reponseBody);
-        } catch (JsonProcessingException e) {
-            return null;
-        }
-    }
-
-    @BeforeEach
-    public void startServer() throws JsonProcessingException {
-        mockServer = ClientAndServer.startClientAndServer(1080);
-
-        FirstDataSourceHotelDto firstDataSourceHotelDto =
-                FirstDataSourceHotelDto.builder()
-                        .id("hotel_id_1")
-                        .destinationId(111)
-                        .description("frequent desc")
-                        .build();
+class HotelsDataMergeControllerTest extends CommonHotelsDataMergeControllerTestFixture{
 
 
-        SecondDataSourceHotelDto secondDataSourceHotelDto =
-                SecondDataSourceHotelDto.builder()
-                    .id("hotel_id_1")
-                    .destinationId(111)
-                    .description("frequent desc")
-                    .build();
-
-        ThirdDataSourceHotelDto thirdDataSourceHotelDto =
-                ThirdDataSourceHotelDto.builder()
-                .id("hotel_id_1")
-                .destinationId(111)
-                .description("frequent desc")
-                .build();
-
-        mockClient = new MockServerClient("127.0.0.1", 1080);
-
-        mockClient.reset();
-        expectNumberOfRespondedHotel(1);
-
-    }
-
-    @AfterEach
-    public void stopServer() {
-        mockServer.stop();
-
-    }
 
 
     @Test
@@ -209,6 +144,23 @@ class HotelsDataMergeControllerTest {
     }
 
     @Test
+    void getHotels_mostFrequentLatIsUsed_0ValueNotCountedInStats() {
+
+        runTest(firstDataSourceHotelDtoBuilder()
+                        .lat(123),
+                secondDataSourceHotelDtoBuilder(),
+                thirdDataSourceHotelDtoBuilder()
+                        .lat(0),
+                new Consumer<Hotel>() {
+                    @Override
+                    public void accept(Hotel hotel) {
+                        and: Assert.assertEquals(123, hotel.getLocation().getLat(), 0);
+                    }
+                });
+
+    }
+
+    @Test
     void getHotels_mostFrequentLatIsUse_noMatchedHotelToProvideLat() {
         expectNumberOfRespondedHotel(2);
         runTest(firstDataSourceHotelDtoBuilder("hotel_id_2", 111)
@@ -248,6 +200,23 @@ class HotelsDataMergeControllerTest {
 
         runTest(firstDataSourceHotelDtoBuilder()
                         .lng(123),
+                secondDataSourceHotelDtoBuilder(),
+                thirdDataSourceHotelDtoBuilder()
+                        .lng(123),
+                new Consumer<Hotel>() {
+                    @Override
+                    public void accept(Hotel hotel) {
+                        and: Assert.assertEquals(123, hotel.getLocation().getLng(), 0);
+                    }
+                });
+
+    }
+
+    @Test
+    void getHotels_mostFrequentLngIsUsed_0ValueIsNotCountedInStats() {
+
+        runTest(firstDataSourceHotelDtoBuilder()
+                        .lng(0),
                 secondDataSourceHotelDtoBuilder(),
                 thirdDataSourceHotelDtoBuilder()
                         .lng(123),
@@ -375,6 +344,7 @@ class HotelsDataMergeControllerTest {
                     }
                 });
 
+
     }
 
     @Test
@@ -420,7 +390,7 @@ class HotelsDataMergeControllerTest {
                 new Consumer<Hotel>() {
                     @Override
                     public void accept(Hotel hotel) {
-                        and: Assert.assertEquals(newMapOfSetValues("general", Set.of("Gym", "Meeting","Parking", "Pool", "Wifi")), hotel.getAmenities());
+                        and: Assert.assertEquals(newMapOfSetValues("general", newSetOfValues("Gym", "Meeting","Parking", "Pool", "Wifi")), hotel.getAmenities());
                     }
                 });
 
@@ -440,8 +410,42 @@ class HotelsDataMergeControllerTest {
                     }
                 });
 
+
+
+
     }
 
+    @Test
+    void getHotels_allAmenitiesAreUsedAndSortedByAlphabetAsc_deduplicateWordsAppendedWithoutSpace() {
+
+        runTest(firstDataSourceHotelDtoBuilder()
+                        .facilities(Set.of("Pool")),
+                secondDataSourceHotelDtoBuilder().amenities(newMapOfSetValues("general", Set.of("Business center", "businessCenter"))),
+                thirdDataSourceHotelDtoBuilder().amenities(Set.of(" BusinessCenter","BusinessCenter ", "Parking")),
+                new Consumer<Hotel>() {
+                    @Override
+                    public void accept(Hotel hotel) {
+                        and: Assert.assertEquals(newMapOfSetValues("general", newSetOfValues("Business Center", "Parking", "Pool")), hotel.getAmenities());
+                    }
+                });
+
+    }
+
+    @Test
+    void getHotels_allAmenitiesAreUsedAndSortedByAlphabetAsc_spaceTrimmedAround() {
+
+        runTest(firstDataSourceHotelDtoBuilder()
+                        .facilities(Set.of("Pool", "Business center " )),
+                secondDataSourceHotelDtoBuilder().amenities(newMapOfSetValues("general", Set.of(" Business center "))),
+                thirdDataSourceHotelDtoBuilder().amenities(Set.of("Parking"," Business center")),
+                new Consumer<Hotel>() {
+                    @Override
+                    public void accept(Hotel hotel) {
+                        and: Assert.assertEquals(newMapOfSetValues("general", newSetOfValues("Business center", "Parking", "Pool")), hotel.getAmenities());
+                    }
+                });
+
+    }
 
     @Test
     void getHotels_allImagesAreUsedAndSortedByImageDescAlphabetAsc() {
@@ -586,52 +590,105 @@ class HotelsDataMergeControllerTest {
                 });
     }
 
-    private void expectNumberOfRespondedHotel(int num) {
-        expectedHotelLength = num;
+    @Test
+    public void getHotels_firstSourceFailed_apiResilientTest() {
+        given: simulateConnectionReset(FIRST_SOURCE_PATH);
+
+        and: mockHotelDataSource(SECOND_SOURCE_PATH, secondDataSourceHotelDtoBuilder().name("name 2").build());
+
+        and: mockHotelDataSource(THIRD_SOURCE_PATH, thirdDataSourceHotelDtoBuilder().build());
+
+
+        when: getHotelsAPIIsCalled();
+
+        and: Assert.assertEquals(expectedHotelLength, actualHotelsResponse.length);
+
+        and: setCurrentHotel(0);
+
+        and: Assert.assertEquals("name 2", currentHotel.getName());
+
     }
 
-    private void setFilter(String inFilter) {
-        filter = "?" + inFilter;
+    @Test
+    public void getHotels_secondSourceFailed_apiResilientTest() {
+        given: mockHotelDataSource(FIRST_SOURCE_PATH, firstDataSourceHotelDtoBuilder().name("name 1").build());
+
+        and: simulateConnectionReset(SECOND_SOURCE_PATH);
+
+        and: mockHotelDataSource(THIRD_SOURCE_PATH, thirdDataSourceHotelDtoBuilder().build());
+
+
+        when: getHotelsAPIIsCalled();
+
+        and: Assert.assertEquals(expectedHotelLength, actualHotelsResponse.length);
+
+        and: setCurrentHotel(0);
+
+        and: Assert.assertEquals("name 1", currentHotel.getName());
+
+    }
+
+    @Test
+    public void getHotels_thirdSourceFailed_apiResilientTest() {
+        given: mockHotelDataSource(FIRST_SOURCE_PATH, firstDataSourceHotelDtoBuilder().name("name 1").build());
+
+        and: mockHotelDataSource(SECOND_SOURCE_PATH, secondDataSourceHotelDtoBuilder().build());
+
+        and: simulateConnectionReset(THIRD_SOURCE_PATH);
+
+
+        when: getHotelsAPIIsCalled();
+
+        and: Assert.assertEquals(expectedHotelLength, actualHotelsResponse.length);
+
+        and: setCurrentHotel(0);
+
+        and: Assert.assertEquals("name 1", currentHotel.getName());
+
     }
 
 
-    private <T> Map<String, Set<T>> mergeMap(Map<String, Set<T>> first, Map<String, Set<T>> second) {
-        first.putAll(second);
-        return first;
+    @Test
+    public void getHotels_onlyOneSourceIsAvailable_apiResilientTest() {
+        given: mockHotelDataSource(FIRST_SOURCE_PATH, firstDataSourceHotelDtoBuilder().name("name 1").build());
+
+        and: simulateConnectionReset(SECOND_SOURCE_PATH);
+
+        and: simulateConnectionReset(THIRD_SOURCE_PATH);
+
+
+        when: getHotelsAPIIsCalled();
+
+        and: Assert.assertEquals(expectedHotelLength, actualHotelsResponse.length);
+
+        and: setCurrentHotel(0);
+
+        and: Assert.assertEquals("name 1", currentHotel.getName());
+
     }
 
+    @Test
+    public void getHotels_callApiTwiceWithCacheDisabled_cacheNotReused() {
+        given: mockHotelDataSource(FIRST_SOURCE_PATH, firstDataSourceHotelDtoBuilder().name("name 1").build());
+
+        and: mockHotelDataSource(SECOND_SOURCE_PATH, secondDataSourceHotelDtoBuilder().build());
+
+        and: mockHotelDataSource(THIRD_SOURCE_PATH, thirdDataSourceHotelDtoBuilder().build());
 
 
-    private FirstDataSourceHotelDto.FirstDataSourceHotelDtoBuilder firstDataSourceHotelDtoBuilder() {
-        return firstDataSourceHotelDtoBuilder("hotel_id_1", 111);
-    }
+        when: getHotelsAPIIsCalled();
+        and: getHotelsAPIIsCalled();
 
-    private SecondDataSourceHotelDto.SecondDataSourceHotelDtoBuilder secondDataSourceHotelDtoBuilder() {
-        return secondDataSourceHotelDtoBuilder("hotel_id_1", 111);
-    }
+        and: Assert.assertEquals(expectedHotelLength, actualHotelsResponse.length);
 
+        and: setCurrentHotel(0);
 
-    private ThirdDataSourceHotelDto.ThirdDataSourceHotelDtoBuilder thirdDataSourceHotelDtoBuilder () {
-        return thirdDataSourceHotelDtoBuilder("hotel_id_1", 111);
-    }
+        and: Assert.assertEquals("name 1", currentHotel.getName());
 
-    private FirstDataSourceHotelDto.FirstDataSourceHotelDtoBuilder firstDataSourceHotelDtoBuilder(String hotelId, int destinationId) {
-        return FirstDataSourceHotelDto.builder()
-                .id(hotelId)
-                .destinationId(destinationId);
-    }
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(FIRST_SOURCE_PATH), VerificationTimes.exactly(2));
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(SECOND_SOURCE_PATH), VerificationTimes.exactly(2));
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(THIRD_SOURCE_PATH), VerificationTimes.exactly(2));
 
-    private SecondDataSourceHotelDto.SecondDataSourceHotelDtoBuilder secondDataSourceHotelDtoBuilder(String hotelId, int destinationId) {
-        return SecondDataSourceHotelDto.builder()
-                .id(hotelId)
-                .destinationId(destinationId);
-    }
-
-
-    private ThirdDataSourceHotelDto.ThirdDataSourceHotelDtoBuilder thirdDataSourceHotelDtoBuilder (String hotelId, int destinationId) {
-        return ThirdDataSourceHotelDto.builder()
-                .id(hotelId)
-                .destinationId(destinationId);
     }
 
     private void runTest(FirstDataSourceHotelDto.FirstDataSourceHotelDtoBuilder firstHotelSourceBuilder,
@@ -651,32 +708,9 @@ class HotelsDataMergeControllerTest {
 
         and: setCurrentHotel(0);
         and: firstHotelComsumer.accept(currentHotel);
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(FIRST_SOURCE_PATH), VerificationTimes.exactly(1));
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(SECOND_SOURCE_PATH), VerificationTimes.exactly(1));
+        and: mockServer.verify(HttpRequest.request().withMethod("GET").withPath(THIRD_SOURCE_PATH), VerificationTimes.exactly(1));
     }
 
-    private <T> Map<String, Set<T>> newMapOfSetValues(String key, Set<T> values) {
-        Map<String, Set<T>> map = new TreeMap<>();
-        map.put(key, values);
-        return map;
-    }
-
-
-
-    private void getHotelsAPIIsCalled() {
-        ExtractableResponse<Response> response = RestAssured
-                .given()
-                .filter(new RequestLoggingFilter())
-                .contentType("application/json")
-                .when()
-                .get("http://localhost:" + port + "/api/hotels" + Optional.ofNullable(filter).orElse(""))
-                .then()
-                .statusCode(200)
-                .extract();
-
-
-        actualHotelsResponse = response.as(Hotel[].class);
-    }
-
-    private void setCurrentHotel(int index) {
-        currentHotel = actualHotelsResponse[index];
-    }
 }
